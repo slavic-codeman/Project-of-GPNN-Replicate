@@ -1,8 +1,7 @@
 # Project-of-GPNN-Replicate
 PKU Cognitive Reasoning Project of GPNN
 ## Original Project
-Link: https://github.com/SiyuanQi-zz/gpnn
-也可以直接下载我们的代码库。
+源代码下载: https://github.com/SiyuanQi-zz/gpnn
 ## Problems:
 1. 原项目过于老旧:
    ```
