@@ -16,3 +16,6 @@ PKU Cognitive Reasoning Project of GPNN
 2. 尝试下载代码，配置环境。
 3. 寻找数据集。
 4. 如果无法跑通原代码，需要手动改写到支持python>=3.7。
+
+## Ideas
+分为两组，3个人去找数据+调试环境，尝试conda中配好环境，跑通训练（因为没有测试的weights下载了），要去从代码扒数据的格式。另外2人直接尝试在python3中搭建模型，走直接复现。
