@@ -22,7 +22,7 @@ PKU Cognitive Reasoning Project of GPNN
 从MS-COCO中提取出来的部分数据，需要先下载[MS-COCO](https://cocodataset.org/#download)中的train\val\test的2014版本的images和train\val的annotations文件，然后再由[VOCO](https://github.com/s-gupta/v-coco)的代码进行转换。为了方便，已经上传了一个经过修改且运行成功的v-coco-master文件夹，先看里面的NEW_README.md，再结合原始的README.md进行数据转换操作。
 
 ### HICO-DET: 
-可以直接搜索网页下载。这里也提供一个[网盘链接](https://disk.pku.edu.cn/link/AAAB41B22C75AA4D549D0D419C6CD2DD9F)（可能文件夹内部很深，因为是从服务器上直接zip压缩的）。注意这里的数据格式可能与GPNN的要求并不匹配，只是原始的数据。
+可以直接搜索网页下载。这里也提供一个[网盘链接](https://disk.pku.edu.cn/link/AAAB41B22C75AA4D549D0D419C6CD2DD9F),密码队名大写，（可能文件夹内部很深，因为是从服务器上直接zip压缩的）。注意这里的数据格式可能与GPNN的要求并不匹配，只是原始的数据。
 
 ### CAD120: 
 目前没有找到...
