@@ -31,3 +31,5 @@ PKU Cognitive Reasoning Project of GPNN
 
 ## Ideas
 分为两组，3个人去找数据+调试环境，尝试conda中配好环境，跑通训练（因为没有测试的weights下载了），要去从代码扒数据的格式。另外2人直接尝试在python3中搭建模型，走直接复现。
+
+如果想要提交自己的代码，建议弄个自己的branch提交，不要直接提交到main。
