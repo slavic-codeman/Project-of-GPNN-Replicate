@@ -8,10 +8,11 @@ Description of the file.
 """
 
 import os
+os.environ['CUDA_VISIBLE_DEVICES']="8"
 import argparse
 import time
 import datetime
-
+from tqdm import tqdm
 import numpy as np
 import torch
 import torch.autograd
@@ -73,6 +74,8 @@ def main(args):
         criterion = criterion.cuda()
 
     loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
+    print(loaded_checkpoint)
+    time.sleep(1000)
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
@@ -127,7 +130,7 @@ def train(train_loader, model, criterion, optimizer, epoch, logger, args=None):
     model.train()
 
     end_time = time.time()
-    for i, (edge_features, node_features, adj_mat, node_labels, sequence_ids, node_nums) in enumerate(train_loader):
+    for i, (edge_features, node_features, adj_mat, node_labels, sequence_ids, node_nums) in enumerate(tqdm(train_loader)):
         data_time.update(time.time() - end_time)
         optimizer.zero_grad()
 
@@ -140,7 +143,7 @@ def train(train_loader, model, criterion, optimizer, epoch, logger, args=None):
         train_loss = criterion(pred_node_labels, node_labels)
 
         # Log
-        losses.update(train_loss.data[0], edge_features.size(0))
+        losses.update(train_loss.item(), edge_features.size(0))
         error_rate, total_nodes, predictions, ground_truth = evaluation(pred_node_labels[:, [0], :], node_labels[:, [0], :])
         subactivity_error_ratio.update(error_rate, total_nodes)
         error_rate, total_nodes, predictions, ground_truth = evaluation(pred_node_labels[:, 1:, :], node_labels[:, 1:, :])

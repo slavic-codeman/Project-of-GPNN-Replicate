@@ -58,6 +58,7 @@ class LinkFunction(nn.Module):
     def l_graph_conv(self, edge_features):
         last_layer_output = edge_features
         for layer in self.learn_modules:
+            
             last_layer_output = layer(last_layer_output)
         return last_layer_output[:, 0, :, :]
 
@@ -121,10 +122,13 @@ def main():
         'link_hidden_size': 5,
         'link_hidden_layers': 2,
     }
-    edge_features = torch.rand(2, 3, 8, 8).to(device)  # Batch size: 2, Features: 3, Spatial size: 8x8
+    for t in range(2):
+        edge_features = torch.rand(2, 3, 8, 8).to(device)  # Batch size: 2, Features: 3, Spatial size: 8x8
 
-    graph_convlstm = LinkFunction('graphconvlstm', args_graphconvlstm, device=device)
-    output = graph_convlstm(edge_features)
+        graph_convlstm = LinkFunction('graphconvlstm', args_graphconvlstm, device=device)
+        output = graph_convlstm(edge_features)
+        a=torch.mean(output)
+        a.backward()
     assert output.shape == (2, 8, 8)
     print("GraphConvLSTM test passed!")
 

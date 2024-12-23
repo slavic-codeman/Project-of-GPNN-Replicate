@@ -168,7 +168,7 @@ def save_checkpoint(state, is_best, directory):
 def load_best_checkpoint(args, model, optimizer):
     if args.resume:
         checkpoint_dir = args.resume
-        best_model_file = os.path.join(checkpoint_dir, 'model_best.pth')
+        best_model_file = os.path.join(checkpoint_dir, 'ori_model_best.pth')
         os.makedirs(checkpoint_dir, exist_ok=True)
         if os.path.isfile(best_model_file):
             print(f"=> Loading best model from '{best_model_file}'")

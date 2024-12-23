@@ -8,12 +8,14 @@ Description of the file.
 """
 
 import os
+os.environ['CUDA_VISIBLE_DEVICES']="8"
 import argparse
 import time
 import datetime
-
+from tqdm import tqdm
 import numpy as np
 import torch
+
 import torch.autograd
 import sklearn.metrics
 
@@ -35,7 +37,7 @@ def evaluation(pred_node_labels, node_labels):
     error_count = 0
     total_nodes = 0
     for batch_i in range(np_pred_node_labels.shape[0]):
-        total_nodes += np_pred_node_labels.shape[1]
+        total_nodes = total_nodes+np_pred_node_labels.shape[1]
         pred_indices = np.argmax(np_pred_node_labels[batch_i, :, :], 1)
         indices = np.argmax(np_node_labels[batch_i, :, :], 1)
 
@@ -67,12 +69,13 @@ def main(args):
     model = models.GPNN_CAD(model_args)
     del edge_features, node_features, adj_mat, node_labels
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    
     criterion = torch.nn.MSELoss()
     if args.cuda:
         model = model.cuda()
         criterion = criterion.cuda()
 
-    loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
+
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
@@ -125,20 +128,25 @@ def train(train_loader, model, criterion, optimizer, epoch, logger, args=None):
 
     # switch to train mode
     model.train()
-
+    for param_group in optimizer.param_groups:
+            print(f"Learning Rate: {param_group['lr']}")
     end_time = time.time()
-    for i, (edge_features, node_features, adj_mat, node_labels, sequence_ids, node_nums) in enumerate(train_loader):
+    for i, (edge_features, node_features, adj_mat, node_labels, sequence_ids, node_nums) in enumerate(tqdm(train_loader)):
         data_time.update(time.time() - end_time)
         optimizer.zero_grad()
-
+   
         edge_features = utils.to_variable(edge_features, args.cuda)
         node_features = utils.to_variable(node_features, args.cuda)
         adj_mat = utils.to_variable(adj_mat, args.cuda)
         node_labels = utils.to_variable(node_labels, args.cuda)
 
         pred_adj_mat, pred_node_labels = model(edge_features, node_features, adj_mat, node_labels, args)
+       
         train_loss = criterion(pred_node_labels, node_labels)
-
+       
+        train_loss.backward()
+        
+        optimizer.step()
         # Log
         losses.update(train_loss.item(), edge_features.size(0))
         error_rate, total_nodes, predictions, ground_truth = evaluation(pred_node_labels[:, [0], :], node_labels[:, [0], :])
@@ -146,13 +154,12 @@ def train(train_loader, model, criterion, optimizer, epoch, logger, args=None):
         error_rate, total_nodes, predictions, ground_truth = evaluation(pred_node_labels[:, 1:, :], node_labels[:, 1:, :])
         affordance_error_ratio.update(error_rate, total_nodes)
 
-        train_loss.backward()
-        optimizer.step()
+      
 
         # Measure elapsed time
         batch_time.update(time.time() - end_time)
         end_time = time.time()
-
+        
     if logger is not None:
         logger.log_value('train_epoch_loss', losses.avg)
         logger.log_value('train_epoch_subactivity_error_ratio', subactivity_error_ratio.avg)
@@ -231,11 +238,11 @@ def validate(val_loader, model, criterion, logger=None, args=None, test=False):
     subact_macro_result = sklearn.metrics.precision_recall_fscore_support(subact_ground_truth, subact_predictions, labels=range(10), average='macro')
     aff_micro_result = sklearn.metrics.precision_recall_fscore_support(affordance_ground_truth, affordance_predictions, labels=range(12), average='micro')
     aff_macro_result = sklearn.metrics.precision_recall_fscore_support(affordance_ground_truth, affordance_predictions, labels=range(12), average='macro')
-    if test:
-        print('Subactivity prediction micro evaluation:', subact_micro_result)
-        print('Subactivity prediction macro evaluation:', subact_macro_result)
-        print('Affordance prediction micro evaluation:', aff_micro_result)
-        print('Affordance prediction macro evaluation:', aff_macro_result)
+   
+    print('Subactivity prediction micro evaluation:', subact_micro_result)
+    print('Subactivity prediction macro evaluation:', subact_macro_result)
+    print('Affordance prediction micro evaluation:', aff_micro_result)
+    print('Affordance prediction macro evaluation:', aff_macro_result)
 
     print(' * Avg Subactivity Error Ratio {act_err.avg:.3f}; Avg Affordance Error Ratio {aff_err.avg:.3f}; Average Loss {loss.avg:.3f}'
           .format(act_err=subactivity_error_ratio, aff_err=affordance_error_ratio, loss=losses))

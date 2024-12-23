@@ -21,7 +21,7 @@ class Paths(object):
             metadata_root: The root folder where the processed information (Skeleton and object features) is stored.
         """
         self.project_root = '/home/tangjq/WORK/GPNN/gpnn-master/'
-        self.tmp_root = os.path.join(self.project_root, 'tmp')
+        self.tmp_root = '/data1/tangjq/tmp'
         self.log_root = os.path.join(self.project_root, 'log')
 
         self.cad_data_root = ''

@@ -8,6 +8,7 @@ Description of the file.
 """
 
 import os
+os.environ['CUDA_VISIBLE_DEVICES']="5"
 import argparse
 import time
 import datetime
@@ -91,8 +92,14 @@ def loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, mse_loss, mult
 
 def compute_mean_avg_prec(y_true, y_score):
     try:
+
+    
         avg_prec = sklearn.metrics.average_precision_score(y_true, y_score, average=None)
+       
         mean_avg_prec = np.nansum(avg_prec) / len(avg_prec)
+       
+
+
     except ValueError:
         mean_avg_prec = 0
 
@@ -170,8 +177,8 @@ def main(args):
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
-    # validate(test_loader, model, mse_loss, multi_label_loss, test=True)
-    gen_test_result(args, test_loader, model, mse_loss, multi_label_loss, img_index)
+    validate(test_loader, model, mse_loss, multi_label_loss, test=True)
+    # gen_test_result(args, test_loader, model, mse_loss, multi_label_loss, img_index)
 
     print('Time elapsed: {:.2f}s'.format(time.time() - start_time))
 
@@ -258,6 +265,10 @@ def validate(val_loader, model, mse_loss, multi_label_loss, logger=None, test=Fa
         adj_mat = utils.to_variable(adj_mat, args.cuda)
         node_labels = utils.to_variable(node_labels, args.cuda)
 
+        try:
+            pred_adj_mat, pred_node_labels = model(edge_features, node_features, adj_mat, node_labels, human_num, obj_num, args)
+        except:
+            continue
         pred_adj_mat, pred_node_labels = model(edge_features, node_features, adj_mat, node_labels, human_num, obj_num, args)
         det_indices, loss = loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, mse_loss, multi_label_loss, human_num, obj_num)
 
@@ -278,7 +289,7 @@ def validate(val_loader, model, mse_loss, multi_label_loss, logger=None, test=Fa
                   'Detected HOIs {y_shape}'
                   .format(i, len(val_loader), batch_time=batch_time,
                           loss=losses, mean_avg_prec=mean_avg_prec, y_shape=y_true.shape))
-
+            
     mean_avg_prec = compute_mean_avg_prec(y_true, y_score)
 
     print(' * Average Mean Precision {mean_avg_prec:.4f}; Average Loss {loss.avg:.4f}'
@@ -289,6 +300,96 @@ def validate(val_loader, model, mse_loss, multi_label_loss, logger=None, test=Fa
         logger.log_value('train_epoch_map', mean_avg_prec)
 
     return 1.0 - mean_avg_prec
+
+# def validate(val_loader, model, mse_loss, multi_label_loss, logger=None, test=False):
+#     if args.visualize:
+#         result_folder = os.path.join(args.tmp_root, 'results/HICO/detections/', 'top'+str(args.vis_top_k))
+#         if not os.path.exists(result_folder):
+#             os.makedirs(result_folder)
+
+#     batch_time = logutil.AverageMeter()
+#     losses = logutil.AverageMeter()
+
+#     y_true = np.empty((0, action_class_num))
+#     y_score = np.empty((0, action_class_num))
+
+#     # switch to evaluate mode
+#     model.eval()
+
+#     end = time.time()
+#     for i, (edge_features, node_features, adj_mat, node_labels, sequence_ids, det_classes, det_boxes, human_num, obj_num) in enumerate(val_loader):
+
+#         edge_features = utils.to_variable(edge_features, args.cuda)
+#         node_features = utils.to_variable(node_features, args.cuda)
+#         adj_mat = utils.to_variable(adj_mat, args.cuda)
+#         node_labels = utils.to_variable(node_labels, args.cuda)
+
+#         pred_adj_mat, pred_node_labels = model(edge_features, node_features, adj_mat, node_labels, human_num, obj_num, args)
+#         det_indices, loss = loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, mse_loss, multi_label_loss, human_num, obj_num)
+
+#         # Log
+#         if len(det_indices) > 0:
+#             losses.update(loss.item(), len(det_indices))
+#             y_true, y_score = evaluation(det_indices, pred_node_labels, node_labels, y_true, y_score, test=test)
+
+#             # Visualization and saving the results if enabled
+#             if args.visualize:
+#                 visualize_and_save(det_indices, pred_node_labels, node_labels, det_classes, det_boxes, sequence_ids, result_folder, args.vis_top_k)
+
+#         # measure elapsed time
+#         batch_time.update(time.time() - end)
+#         end = time.time()
+
+#         if i % args.log_interval == 0 and i > 0:
+#             mean_avg_prec = compute_mean_avg_prec(y_true, y_score)
+#             print('Test: [{0}/{1}]	'
+#                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})	'
+#                   'Loss {loss.val:.4f} ({loss.avg:.4f})	'
+#                   'Mean Avg Precision {mean_avg_prec:.4f} ({mean_avg_prec:.4f})	'
+#                   'Detected HOIs {y_shape}'
+#                   .format(i, len(val_loader), batch_time=batch_time,
+#                           loss=losses, mean_avg_prec=mean_avg_prec, y_shape=y_true.shape))
+
+#     mean_avg_prec = compute_mean_avg_prec(y_true, y_score)
+
+#     print(' * Average Mean Precision {mean_avg_prec:.4f}; Average Loss {loss.avg:.4f}'
+#           .format(mean_avg_prec=mean_avg_prec, loss=losses))
+
+#     if logger is not None:
+#         logger.log_value('test_epoch_loss', losses.avg)
+#         logger.log_value('train_epoch_map', mean_avg_prec)
+
+#     return 1.0 - mean_avg_prec
+
+# def visualize_and_save(det_indices, pred_node_labels, node_labels, det_classes, det_boxes, sequence_ids, result_folder, top_k):
+#     """
+#     Visualize and save the top-k results.
+#     """
+#     import cv2
+#     for idx in det_indices[:top_k]:
+#         # Extract detection information
+#         sequence_id = sequence_ids[idx]
+#         pred_labels = pred_node_labels[idx].cpu().data.numpy()
+#         gt_labels = node_labels[idx].cpu().data.numpy()
+#         det_class = det_classes[idx]
+#         det_box = det_boxes[idx]
+
+#         # Create a visualization (e.g., draw bounding boxes and labels on an image)
+#         image_path = os.path.join(args.image_root, f"{sequence_id}.jpg")
+#         if not os.path.exists(image_path):
+#             continue
+
+#         image = cv2.imread(image_path)
+#         for box, label, score in zip(det_box, pred_labels, gt_labels):
+#             x1, y1, x2, y2 = map(int, box)
+#             label_text = f"Class: {label}, Score: {score:.2f}"
+#             cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#             cv2.putText(image, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+#         # Save the visualization result
+#         save_path = os.path.join(result_folder, f"{sequence_id}_topk.jpg")
+#         cv2.imwrite(save_path, image)
+
 
 def get_indices(pred_adj_mat, pred_node_labels, human_num, obj_num, det_class, det_box):
 

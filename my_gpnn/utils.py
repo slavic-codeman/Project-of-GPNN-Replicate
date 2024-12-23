@@ -182,7 +182,7 @@ def get_hico_data(args):
         train_filenames = filenames[int(len(filenames)*validation_ratio):]
         val_filenames = filenames[:int(len(filenames)*validation_ratio)]
 
-    with open(os.path.join(args.tmp_root, 'hico', 'test.txt')) as f:
+    with open(os.path.join(args.tmp_root, 'hico', 'test_rare.txt')) as f:
         test_filenames = [line.strip() for line in f.readlines()]
     with open(os.path.join(args.tmp_root, 'hico', 'img_index.txt')) as f:
         img_index = [line.strip() for line in f.readlines()]
@@ -207,7 +207,7 @@ def get_hico_data(args):
 
 def get_vcoco_data(args):
     root = os.path.join(args.data_root, 'processed', args.feature_type)
-    root="/home/tangjq/WORK/GPNN/gpnn-master/tmp/vcoco/vcoco_features/"
+    root="/data1/tangjq/tmp/vcoco/vcoco_features/"
     training_set = datasets.VCOCO(root, 'train')
     valid_set = datasets.VCOCO(root, 'val')
     testing_set = datasets.VCOCO(root, 'test')
@@ -274,7 +274,8 @@ def plot_box_with_label(img, box, color, label):
 
 def visualize_vcoco_result(args, result_folder, all_results):
     coco = vu.load_coco()
-    img_dir = os.path.join(args.data_root, '../v-coco/coco/images', 'val2014')
+    # img_dir = os.path.join(args.data_root, 'v-coco-master/coco/images', 'val2014')
+    img_dir = '/data1/tangjq/COCO_data/val2014'
     last_img_name = ''
     img_result_id = 0
     for result in all_results:

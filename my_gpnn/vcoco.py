@@ -8,6 +8,7 @@ Description of the file.
 """
 
 import os
+os.environ['CUDA_VISIBLE_DEVICES']="8"
 import argparse
 import time
 import datetime
@@ -223,6 +224,8 @@ def main(args):
         multi_label_loss = multi_label_loss.cuda()
 
     loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
+   
+
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
@@ -266,7 +269,7 @@ def main(args):
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
     """如果validate的test=True，则会报错keyError，可能是还是有数据缺失，待解决"""
-    validate(args, test_loader, model, mse_loss, multi_label_loss, test_vcocoeval, test=False)
+    validate(args, test_loader, model, mse_loss, multi_label_loss, test_vcocoeval, test=True)
     print('Time elapsed: {:.2f}s'.format(time.time() - start_time))
 
 
@@ -381,7 +384,7 @@ def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, log
                   'Detected HOIs {y_shape}'
                   .format(i, len(val_loader), batch_time=batch_time,
                           loss=losses, mean_avg_prec=mean_avg_prec, y_shape=y_true.shape))
-        break
+       
     mean_avg_prec = compute_mean_avg_prec(y_true, y_score)
     if test:
         vcoco_evaluation(args, vcocoeval, 'test', all_results)

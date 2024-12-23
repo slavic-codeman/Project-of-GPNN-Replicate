@@ -47,8 +47,8 @@ class GPNN_CAD(nn.Module):
 
     def forward(self, edge_features, node_features, adj_mat, node_labels, args):
         pred_node_labels = torch.zeros(node_labels.size(), device=self.device)
-        hidden_node_states = [node_features.clone() for _ in range(self.propagate_layers + 1)]
-        #print(pred_node_labels.shape)
+        hidden_node_states = [node_features for _ in range(self.propagate_layers + 1)]
+        
         hidden_edge_states = [edge_features.clone() for _ in range(self.propagate_layers + 1)]
 
         # Belief propagation
@@ -61,10 +61,11 @@ class GPNN_CAD(nn.Module):
                 e_vw = edge_features[:, :, i_node, :]
 
                 m_v = self.message_fun(h_v, h_w, e_vw, args)
-
+                
                 # Sum up messages from different nodes according to weights
                 m_v = pred_adj_mat[:, i_node, :].unsqueeze(1).expand_as(m_v) * m_v
                 hidden_edge_states[passing_round + 1][:, :, :, i_node] = m_v
+         
                 m_v = torch.sum(m_v, dim=2)
 
                 if i_node == 0:
@@ -78,7 +79,9 @@ class GPNN_CAD(nn.Module):
                     else:
                         # TODO Modified shape? concatenation or inclusion of subactivity in affordance?
                         pred_node_labels[:, i_node, :] = self.readout_funs[1](h_v.squeeze(0))
+                      
                         #pred_node_labels[:, i_node, self.subactivity_classes:] = self.readout_funs[1](h_v.squeeze(0))
+
         return pred_adj_mat, pred_node_labels
 
     def _load_link_fun(self, model_args):
@@ -131,6 +134,9 @@ def main():
     model = GPNN_CAD(model_args, device=device)
     pred_adj_mat, pred_node_labels = model(edge_features, node_features, adj_mat, node_labels, args={'cuda': True})
 
+
+    a=torch.mean(pred_adj_mat)
+    a.backward()
     assert pred_adj_mat.shape == adj_mat.shape
     assert pred_node_labels.shape == node_labels.shape
     print("All tests passed!")

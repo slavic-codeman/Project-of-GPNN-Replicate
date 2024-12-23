@@ -79,17 +79,20 @@ class ConvLSTM(nn.Module):
         if reset:
             self._reset_hidden_states()
         else:
-            for prev_state in self.prev_states:
-                if prev_state is not None:
-                    prev_state[0].detach_()
-                    prev_state[1].detach_()
+            # TODO: modified how to updata prev states
+            for i in range(len(self.prev_states)):
+                if self.prev_states[i] is not None:
+                    self.prev_states[i] = (
+                        self.prev_states[i][0].clone().detach(),
+                        self.prev_states[i][1].clone().detach()
+                    )
 
         next_layer_input = input_
         for i, layer in enumerate(self.learn_modeles):
             prev_state = layer(next_layer_input, self.prev_states[i])
             next_layer_input = prev_state[0]
             self.prev_states[i] = prev_state
-
+            
         return next_layer_input
 
     def _reset_hidden_states(self):
@@ -126,13 +129,17 @@ def main():
     hidden_layer_num = 2
     lstm = ConvLSTM(input_channels, hidden_channels, hidden_layer_num, kernel_size).to(device)
 
-    seq_len = 4
-    inputs = torch.rand(seq_len, batch_size, input_channels, height, width).to(device)
-    outputs = []
-    for t in range(seq_len):
-        output = lstm(inputs[t])
-        outputs.append(output)
 
+    for t in range(2):
+        lstm._reset_hidden_states()
+        seq_len = 4
+        inputs = torch.rand(seq_len, batch_size, input_channels, height, width).to(device)
+        outputs = []
+        for t in range(seq_len):
+            output = lstm(inputs[t])
+            outputs.append(output)
+        a=torch.mean(outputs[-1])
+        a.backward()
     assert outputs[-1].shape == (batch_size, hidden_channels, height, width)
     print("ConvLSTM forward pass test passed.")
 
