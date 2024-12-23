@@ -3,10 +3,7 @@ PKU Cognitive Reasoning Project of GPNN
 ## Original Project
 源代码下载: [GPNN](https://github.com/SiyuanQi-zz/gpnn)
 ## Tasks
-0. 看论文。
-1. 尝试下载代码，配置环境，试着运行一下。
-2. bug: 见my_gpnn/vcoco.py第268行的问题
-3. *找创新改进点
+根据源码和现在的可以运行的my_gpnn代码，从0开始Replicate一下代码。请三人分工好，比如谁负责model部分，谁负责dataset部分，谁负责训练和测试的loop构建部分等等。my_gpnn代码的运行的注意事项参考下面的内容。
 ## Data
 原github中tmp文件的drive已经失效，新的链接为[tmp](https://drive.google.com/drive/folders/1vrY7dEautbrScO2kITdFR0kf9Te_GMAJ)
 有两个文件夹，都要解压，确保解压的dst相同，这样都会解压到生成的一个tmp文件中。
