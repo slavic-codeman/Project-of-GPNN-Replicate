@@ -35,7 +35,7 @@ class GPNN_VCOCO(torch.nn.Module):
         self.link_fun = units.LinkFunction('GraphConv', model_args, self.device).to(self.device)
         self.sigmoid = torch.nn.Sigmoid().to(self.device)
         self.message_fun = units.MessageFunction('linear_concat_relu', model_args, self.device).to(self.device)
-        self.update_fun = units.UpdateFunction('gru', model_args, self.device).to(self.device)
+        self.update_fun = units.UpdateFunction('transformer' if model_args.get('transformer', False) else 'gru', model_args, self.device).to(self.device)
         self.readout_fun = units.ReadoutFunction('fc', {'readout_input_size': model_args['node_feature_size'], 'output_classes': model_args['hoi_classes']}, self.device).to(self.device)
         self.readout_fun2 = units.ReadoutFunction('fc', {'readout_input_size': model_args['node_feature_size'], 'output_classes': model_args['roles_num']}, self.device).to(self.device)
 

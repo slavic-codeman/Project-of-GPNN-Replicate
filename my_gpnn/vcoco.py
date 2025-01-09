@@ -8,7 +8,8 @@ Description of the file.
 """
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES']="0"
+import warnings
+warnings.filterwarnings("ignore")
 import argparse
 import time
 import datetime
@@ -43,6 +44,7 @@ def evaluation(det_indices, pred_node_labels, node_labels, y_true, y_score, test
 
     new_y_true = np.empty((2 * len(det_indices), action_class_num))
     new_y_score = np.empty((2 * len(det_indices), action_class_num))
+
     for y_i, (batch_i, i, j, s) in enumerate(det_indices):
         new_y_true[2*y_i, :] = np_node_labels[batch_i, i, :]
         new_y_true[2*y_i+1, :] = np_node_labels[batch_i, j, :]
@@ -51,17 +53,17 @@ def evaluation(det_indices, pred_node_labels, node_labels, y_true, y_score, test
 
     y_true = np.vstack((y_true, new_y_true))
     y_score = np.vstack((y_score, new_y_score))
+
     return y_true, y_score
 
 
 def append_result(all_results, node_labels, node_roles, image_id, boxes, human_num, obj_num, classes, adj_mat):
     metadata = datasets.vcoco_metadata
     for i in range(human_num):
-        # if node_labels[i, metadata.action_index['none']] > 0.5:
-        #     continue
         instance_result = dict()
         instance_result['image_id'] = image_id
         instance_result['person_box'] = boxes[i, :]
+
         for action_index, action in enumerate(metadata.action_classes):
             if action == 'none':  # or node_labels[i, action_index] < 0.5
                 continue
@@ -114,22 +116,19 @@ def append_results(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_no
 
 
 def vcoco_evaluation(args, vcocoeval, imageset, all_results):
-
     det_file = os.path.join(args.eval_root, '{}_detections.pkl'.format(imageset))
     pickle.dump(all_results, open(det_file, 'wb'))
     vcocoeval._do_eval(det_file, ovr_thresh=0.5)
 
 
-def weighted_loss(output, target):
-    weight_mask = torch.autograd.Variable(torch.ones(target.size()))
-    if hasattr(args, 'cuda') and args.cuda:
-        weight_mask = weight_mask.cuda()
+def weighted_loss(output, target, device):
+    weight_mask = torch.ones(target.size()).to(device)
     link_weight = args.link_weight if hasattr(args, 'link_weight') else 1.0
     weight_mask += target * link_weight
-    return torch.nn.MultiLabelSoftMarginLoss(weight=weight_mask).cuda()(output, target)
+    return torch.nn.MultiLabelSoftMarginLoss(weight=weight_mask).to(device)(output, target)
 
 
-def loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss):
+def loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss, device):
     det_indices = list()
     pred_adj_mat_prob = torch.nn.Sigmoid()(pred_adj_mat)
     np_pred_adj_mat = pred_adj_mat_prob.detach().cpu().numpy()
@@ -154,7 +153,7 @@ def loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_role
     batch_size = pred_node_labels.size()[0]
     for batch_i in range(batch_size):
         node_num = human_nums[batch_i] + obj_nums[batch_i]
-        loss = weighted_loss(pred_node_labels[batch_i, :node_num, :].view(-1, action_class_num), node_labels[batch_i, :node_num, :].view(-1, action_class_num)) + weighted_loss(pred_adj_mat[batch_i, :node_num, :node_num], adj_mat[batch_i, :node_num, :node_num])
+        loss = weighted_loss(pred_node_labels[batch_i, :node_num, :].view(-1, action_class_num), node_labels[batch_i, :node_num, :].view(-1, action_class_num), device) + weighted_loss(pred_adj_mat[batch_i, :node_num, :node_num], adj_mat[batch_i, :node_num, :node_num], device)
 
         # Ablative analysis
         # loss = weighted_loss(pred_node_labels[batch_i, :node_num, :].view(-1, action_class_num),
@@ -177,8 +176,6 @@ def compute_mean_avg_prec(y_true, y_score):
     try:
         avg_prec = sklearn.metrics.average_precision_score(y_true[:, 1:], y_score[:, 1:], average='micro')
         return avg_prec
-        # mean_avg_prec = np.nansum(avg_prec) / len(avg_prec)
-        # mean_avg_prec = np.nanmean(avg_prec)
     except ValueError:
         mean_avg_prec = 0
 
@@ -196,8 +193,8 @@ def main(args):
     torch.manual_seed(0)
     start_time = time.time()
 
-    args.cuda = not args.no_cuda and torch.cuda.is_available()
-    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H-%M-%S')
+    device = torch.device("cuda" if not args.no_cuda and torch.cuda.is_available() else "cpu") 
+    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H-%M-%S')
     logger = logutil.Logger(os.path.join(args.log_root, timestamp))
 
     # Load data
@@ -213,31 +210,36 @@ def main(args):
     # Get data size and define model
     edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_id, img_name, human_num, obj_num, classes = training_set[0]
     edge_feature_size, node_feature_size = edge_features.shape[2], node_features.shape[1]
-    # message_size = int(edge_feature_size/2)*2
-    # message_size = edge_feature_size*2
-    # message_size = 1024
     message_size = edge_feature_size
-    model_args = {'model_path': args.resume, 'edge_feature_size': edge_feature_size, 'node_feature_size': node_feature_size, 'message_size': message_size, 'link_hidden_size': 256, 'link_hidden_layers': 3, 'link_relu': False, 'update_hidden_layers': 1, 'update_dropout': False, 'update_bias': True, 'propagate_layers': 3, 'hoi_classes': action_class_num, 'roles_num': roles_num, 'resize_feature_to_message_size': False, 'feature_type': args.feature_type}
-    model = models.GPNN_VCOCO(model_args)
+    model_args = {'model_path': args.resume, 
+                  'edge_feature_size': edge_feature_size, 
+                  'node_feature_size': node_feature_size, 
+                  'message_size': message_size, 
+                  'link_hidden_size': 256, 
+                  'link_hidden_layers': 3, 
+                  'link_relu': False, 
+                  'update_hidden_layers': 1, 
+                  'update_dropout': False, 
+                  'update_bias': True, 
+                  'propagate_layers': 3, 
+                  'hoi_classes': action_class_num, 
+                  'roles_num': roles_num, 
+                  'resize_feature_to_message_size': False, 
+                  'feature_type': args.feature_type,
+                  'update_type': 'transformer' if args.transformer else 'gru'
+                  }
     del edge_features, node_features, adj_mat, node_labels
+    
+    model = models.GPNN_VCOCO(model_args).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    mse_loss = torch.nn.MSELoss()
-    multi_label_loss = torch.nn.MultiLabelSoftMarginLoss()
-    if args.cuda:
-        model = model.cuda()
-        mse_loss = mse_loss.cuda()
-        multi_label_loss = multi_label_loss.cuda()
+    mse_loss = torch.nn.MSELoss().to(device)
+    multi_label_loss = torch.nn.MultiLabelSoftMarginLoss().to(device)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=args.lr_decay)
 
     loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
-    
-    
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
    
-    # for param_group in optimizer.param_groups:
-    #     print(1e-3/param_group['lr'])
-
-    # time.sleep(1000)
     epoch_errors = list()
     avg_epoch_error = np.inf
     best_epoch_error = np.inf
@@ -246,11 +248,11 @@ def main(args):
         logger.log_value('learning_rate', args.lr).step()
 
         # train for one epoch
-        train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoch, train_vcocoeval, logger)
+        train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoch, train_vcocoeval, logger, device)
         # test on validation set
-        epoch_error = validate(args, valid_loader, model, mse_loss, multi_label_loss, val_vcocoeval, logger)
-
+        epoch_error = validate(args, valid_loader, model, mse_loss, multi_label_loss, val_vcocoeval, logger, device)
         epoch_errors.append(epoch_error)
+
         if len(epoch_errors) == 2:
             new_avg_epoch_error = np.mean(np.array(epoch_errors))
             if avg_epoch_error - new_avg_epoch_error < 0.005:
@@ -258,15 +260,11 @@ def main(args):
             avg_epoch_error = new_avg_epoch_error
             epoch_errors = list()
 
-        if (epoch+1) % 5 == 0:
-            print('Learning rate decrease')
-            args.lr *= args.lr_decay
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = args.lr
+            scheduler.step()
 
         is_best = epoch_error < best_epoch_error
         best_epoch_error = min(epoch_error, best_epoch_error)
-        datasets.utils.save_checkpoint({'epoch': epoch + 1, 'state_dict': model.state_dict(),
+        datasets.utils.save_checkpoint(args, {'epoch': epoch + 1, 'state_dict': model.state_dict(),
                                         'best_epoch_error': best_epoch_error, 'avg_epoch_error': avg_epoch_error,
                                         'optimizer': optimizer.state_dict(), },
                                        is_best=is_best, directory=args.resume)
@@ -278,11 +276,11 @@ def main(args):
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
     """如果validate的test=True，则会报错keyError，可能是还是有数据缺失，待解决"""
-    validate(args, test_loader, model, mse_loss, multi_label_loss, val_vcocoeval, test=True)
+    validate(args, test_loader, model, mse_loss, multi_label_loss, val_vcocoeval, device=device, test=True)
     print('Time elapsed: {:.2f}s'.format(time.time() - start_time))
 
 
-def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoch, vcocoeval, logger):
+def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoch, vcocoeval, logger, device):
     batch_time = logutil.AverageMeter()
     data_time = logutil.AverageMeter()
     losses = logutil.AverageMeter()
@@ -293,20 +291,20 @@ def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoc
 
     # switch to train mode
     model.train()
-
     end_time = time.time()
+
     for i, (edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_ids, img_names, human_nums, obj_nums, classes) in enumerate(train_loader):
         data_time.update(time.time() - end_time)
         optimizer.zero_grad()
 
-        edge_features = utils.to_variable(edge_features, args.cuda)
-        node_features = utils.to_variable(node_features, args.cuda)
-        adj_mat = utils.to_variable(adj_mat, args.cuda)
-        node_labels = utils.to_variable(node_labels, args.cuda)
-        node_roles = utils.to_variable(node_roles, args.cuda)
+        edge_features = edge_features.to(device)
+        node_features = node_features.to(device)
+        adj_mat = adj_mat.to(device)
+        node_labels = node_labels.to(device)
+        node_roles = node_roles.to(device)
 
         pred_adj_mat, pred_node_labels, pred_node_roles = model(edge_features, node_features, adj_mat, node_labels, node_roles, human_nums, obj_nums, args)
-        det_indices, loss = loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss)
+        det_indices, loss = loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss, device)
         append_results(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, img_ids,
                        boxes, human_nums, obj_nums, classes, all_results)
 
@@ -345,7 +343,7 @@ def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoc
           .format(epoch, map=mean_avg_prec, loss=losses, b_time=batch_time))
 
 
-def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, logger=None, test=False):
+def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, logger=None, device=None, test=False):
     if args.visualize:
         # result_folder = os.path.join(args.tmp_root, 'results/VCOCO/detections/', 'top'+str(args.vis_top_k))
         result_folder = os.path.join(args.tmp_root, 'results/VCOCO/detections/visualization')
@@ -361,111 +359,92 @@ def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, log
 
     # switch to evaluate mode
     model.eval()
-
     end = time.time()
-    for i, (edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_ids, img_names, human_nums, obj_nums, classes) in enumerate(val_loader):
-        
-        edge_features = utils.to_variable(edge_features, args.cuda)
-        node_features = utils.to_variable(node_features, args.cuda)
-        adj_mat = utils.to_variable(adj_mat, args.cuda)
-        node_labels = utils.to_variable(node_labels, args.cuda)
-        node_roles = utils.to_variable(node_roles, args.cuda)
 
-        pred_adj_mat, pred_node_labels, pred_node_roles = model(edge_features, node_features, adj_mat, node_labels, node_roles, human_nums, obj_nums, args)
-        det_indices, loss = loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss)
-        # print(det_indices) # [检测到的所有hoi数*(batch_id, human_index, obj_index, confidence)]
-        if len(det_indices) == 0:
-            continue
-        best_det_indices = [max(det_indices, key=lambda x: x[3])[:3]]
-        append_results(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, img_ids,
-                           boxes, human_nums, obj_nums, classes, all_results)
-        pred_actions_indeces = torch.argmax(pred_node_labels, axis=2)
-        pred_actions = [metadata.action_classes[i] for i in pred_actions_indeces[0]]
-        pred_action = None
-        for action in pred_actions:
-            if action != 'no_interaction':
-                pred_action = action
-                break
-        # print(classes)
-        # print(boxes[0].shape)
-        # print(adj_mat.shape)
-        # print(node_labels.shape)
-        # # print(node_roles.shape)
-        # print(best_det_indices)
-        # import sys
-        # sys.exit()
-
-        # Log
-        if len(det_indices) > 0:
-            losses.update(loss.item(), len(det_indices))
-            y_true, y_score = evaluation(det_indices, pred_node_labels, node_labels, y_true, y_score, test=test)
-
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        if i % args.log_interval == 0:
-            mean_avg_prec = compute_mean_avg_prec(y_true, y_score)
-            print('Test: [{0}/{1}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Mean Avg Precision {mean_avg_prec:.4f} ({mean_avg_prec:.4f})\t'
-                  'Detected HOIs {y_shape}'
-                  .format(i, len(val_loader), batch_time=batch_time,
-                          loss=losses, mean_avg_prec=mean_avg_prec, y_shape=y_true.shape))
+    with torch.no_grad():
+        for i, (edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_ids, img_names, human_nums, obj_nums, classes) in enumerate(val_loader):
             
-        if args.visualize:
-            # utils.visualize_vcoco_result(args, result_folder, all_results)
-            for j, image_id in enumerate(img_ids):
-                image_path = os.path.join('/data1/tangjq/COCO_data/val2014', f"COCO_val2014_{image_id:012d}.jpg")
-                save_path = os.path.join(result_folder, f"COCO_val2014_{image_id:012d}.jpg")
-                # image = cv2.imread(image_path)
-                image = Image.open(image_path)
-                image = np.array(image)
-                # image_pil = Image.fromarray(np.uint8(image)).convert('RGB')
-                # image_pil.save('/home/tangjq/WORK/GPNN/gpnn-master/tmp/results/HICO/detections/debug/0.jpg')
-                # import sys
-                # sys.exit()
-                for n, (batch, human_indice, obj_indice) in enumerate(best_det_indices):
-                    new_classes = [classes[batch][human_indice], classes[batch][obj_indice]]
-                    new_boxes = np.array([boxes[batch][human_indice], boxes[batch][obj_indice]])
-                    image = visualize_hoi(image=image, boxes=new_boxes, classes=new_classes, scores=None, line_thickness=1)
-                    if pred_action != None:
-                        draw = ImageDraw.Draw(image)
-                        font = ImageFont.truetype('/usr/share/fonts/truetype/freefont/FreeSans.ttf', 24)
-                        # text_width, text_height = draw.textsize(pred_action, font=font)
-                        # image_width, image_height = image.size
-                        # text_x = (image_width - text_width) // 2
-                        # text_y = -text_height - 10
-                        # draw.text((text_x, text_y), pred_action, fill="black", font=font)
-                        # 5. 计算文字大小
-                        text_width, text_height = draw.textsize(pred_action, font=font)
+            edge_features = edge_features.to(device)
+            node_features = node_features.to(device)
+            adj_mat = adj_mat.to(device)
+            node_labels = node_labels.to(device)
+            node_roles = node_roles.to(device)
 
-                        # 6. 计算矩形框和文字的位置
-                        image_width, image_height = image.size
-                        text_x = (image_width - text_width) // 2  # 文字水平居中
-                        text_y = 10  # 文字距图像顶部10像素
-                        padding = 5  # 矩形框与文字之间的边距
+            pred_adj_mat, pred_node_labels, pred_node_roles = model(edge_features, node_features, adj_mat, node_labels, node_roles, human_nums, obj_nums, args)
+            det_indices, loss = loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss, device)
+            # print(det_indices) # [检测到的所有hoi数*(batch_id, human_index, obj_index, confidence)]
+            if len(det_indices) == 0:
+                continue
+            best_det_indices = [max(det_indices, key=lambda x: x[3])[:3]]
+            append_results(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, img_ids,
+                            boxes, human_nums, obj_nums, classes, all_results)
+            pred_actions_indeces = torch.argmax(pred_node_labels, axis=2)
+            pred_actions = [metadata.action_classes[i] for i in pred_actions_indeces[0]]
+            pred_action = None
+            for action in pred_actions:
+                if action != 'no_interaction':
+                    pred_action = action
+                    break
+            # Log
+            if len(det_indices) > 0:
+                losses.update(loss.item(), len(det_indices))
+                y_true, y_score = evaluation(det_indices, pred_node_labels, node_labels, y_true, y_score, test=test)
 
-                        # 矩形框的坐标
-                        rect_x1 = text_x - padding
-                        rect_y1 = text_y - padding
-                        rect_x2 = text_x + text_width + padding
-                        rect_y2 = text_y + text_height + padding
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
 
-                        # 7. 绘制白色矩形框
-                        draw.rectangle([(rect_x1, rect_y1), (rect_x2, rect_y2)], fill="white")
+            if i % args.log_interval == 0:
+                mean_avg_prec = compute_mean_avg_prec(y_true, y_score)
+                print('Test: [{0}/{1}]\t'
+                    'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                    'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                    'Mean Avg Precision {mean_avg_prec:.4f} ({mean_avg_prec:.4f})\t'
+                    'Detected HOIs {y_shape}'
+                    .format(i, len(val_loader), batch_time=batch_time,
+                            loss=losses, mean_avg_prec=mean_avg_prec, y_shape=y_true.shape))
+                
+            if args.visualize:
+                # utils.visualize_vcoco_result(args, result_folder, all_results)
+                for j, image_id in enumerate(img_ids):
+                    image_path = os.path.join('./COCO_data/val2014', f"COCO_val2014_{image_id:012d}.jpg")
+                    save_path = os.path.join(result_folder, f"COCO_val2014_{image_id:012d}.jpg")
+                    image = Image.open(image_path)
+                    image = np.array(image)
 
-                        # 8. 绘制黑色文字
-                        draw.text((text_x, text_y), pred_action, fill="black", font=font)
-                    image.save(save_path)
+                    for n, (batch, human_indice, obj_indice) in enumerate(best_det_indices):
+                        new_classes = [classes[batch][human_indice], classes[batch][obj_indice]]
+                        new_boxes = np.array([boxes[batch][human_indice], boxes[batch][obj_indice]])
+                        image = visualize_hoi(image=image, boxes=new_boxes, classes=new_classes, scores=None, line_thickness=1)
+                        if pred_action != None:
+                            draw = ImageDraw.Draw(image)
+                            font = ImageFont.truetype('./freefont/FreeSans.ttf', 24)
+                            text_width, text_height = draw.textsize(pred_action, font=font)
+
+                            # 6. 计算矩形框和文字的位置
+                            image_width, image_height = image.size
+                            text_x = (image_width - text_width) // 2  # 文字水平居中
+                            text_y = 10  # 文字距图像顶部10像素
+                            padding = 5  # 矩形框与文字之间的边距
+
+                            # 矩形框的坐标
+                            rect_x1 = text_x - padding
+                            rect_y1 = text_y - padding
+                            rect_x2 = text_x + text_width + padding
+                            rect_y2 = text_y + text_height + padding
+
+                            # 7. 绘制白色矩形框
+                            draw.rectangle([(rect_x1, rect_y1), (rect_x2, rect_y2)], fill="white")
+
+                            # 8. 绘制黑色文字
+                            draw.text((text_x, text_y), pred_action, fill="black", font=font)
+                        image.save(save_path)
        
     mean_avg_prec = compute_mean_avg_prec(y_true, y_score)
     if test:
         vcoco_evaluation(args, vcocoeval, 'test', all_results)
     else:
         pass
-        # vcoco_evaluation(args, vcocoeval, 'val', all_results)
 
     print(' * Average Mean Precision {mean_avg_prec:.4f}; Average Loss {loss.avg:.4f}'
           .format(mean_avg_prec=mean_avg_prec, loss=losses))
@@ -477,15 +456,13 @@ def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, log
     return 1.0 - mean_avg_prec
 
 
-def parse_arguments():
+def parse_arguments(paths):
     # Parser check
     def restricted_float(x, inter):
         x = float(x)
         if x < inter[0] or x > inter[1]:
             raise argparse.ArgumentTypeError("%r not in range [1e-5, 1e-4]"%(x,))
         return x
-
-    paths = config.Paths()
 
     feature_type = 'resnet'
 
@@ -502,12 +479,12 @@ def parse_arguments():
     parser.add_argument('--vis-top-k', type=int, default=1, metavar='N', help='Top k results to visualize')
 
     # Optimization Options
-    parser.add_argument('--batch-size', type=int, default=1, metavar='N',
-                        help='Input batch size for training (default: 10)')
+    parser.add_argument('--batch-size', type=int, default=2, metavar='N',
+                        help='Input batch size for training (default: 2)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='Enables CUDA training')
     parser.add_argument('--epochs', type=int, default=20, metavar='N',
-                        help='Number of epochs to train (default: 10)')
+                        help='Number of epochs to train (default: 20)')
     parser.add_argument('--start-epoch', type=int, default=0, metavar='N',
                         help='Index of epoch to start (default: 0)')
     parser.add_argument('--link-weight', type=float, default=2, metavar='N',
@@ -519,6 +496,8 @@ def parse_arguments():
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
 
+    parser.add_argument('--transformer', action='store_true', default=False, help='whether to use transformer')
+
     # i/o
     parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                         help='How many batches to wait before logging training status')
@@ -529,5 +508,7 @@ def parse_arguments():
 
 
 if __name__ == '__main__':
-    args = parse_arguments()
+    paths = config.Paths()
+    args = parse_arguments(paths)
+
     main(args)

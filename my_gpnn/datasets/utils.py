@@ -156,10 +156,10 @@ def collate_fn_vcoco(batch):
     )
 
 
-def save_checkpoint(state, is_best, directory):
+def save_checkpoint(args, state, is_best, directory):
     os.makedirs(directory, exist_ok=True)
     checkpoint_file = os.path.join(directory, 'checkpoint.pth')
-    best_model_file = os.path.join(directory, 'model_best.pth')
+    best_model_file = os.path.join(directory, 'model_best_transformer.pth' if args.transformer else 'model_best.pth')
     torch.save(state, checkpoint_file)
     if is_best:
         shutil.copyfile(checkpoint_file, best_model_file)
@@ -168,7 +168,7 @@ def save_checkpoint(state, is_best, directory):
 def load_best_checkpoint(args, model, optimizer):
     if args.resume:
         checkpoint_dir = args.resume
-        best_model_file = os.path.join(checkpoint_dir, 'ori_model_best.pth')
+        best_model_file = os.path.join(checkpoint_dir, 'model_best_transformer.pth' if args.transformer else 'model_best.pth')
         os.makedirs(checkpoint_dir, exist_ok=True)
         if os.path.isfile(best_model_file):
             print(f"=> Loading best model from '{best_model_file}'")
@@ -178,8 +178,8 @@ def load_best_checkpoint(args, model, optimizer):
             avg_epoch_error = checkpoint.get('avg_epoch_error', np.inf)
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
-            if args.cuda:
-                model.cuda()
+            # if args.cuda:
+            #     model.cuda()
             print(f"=> Loaded best model (epoch {checkpoint['epoch']})")
             return args, best_epoch_error, avg_epoch_error, model, optimizer
         else:

@@ -20,12 +20,12 @@ class ConvLSTMCell(nn.Module):
     Generate a convolutional LSTM cell
     """
 
-    def __init__(self, input_size, hidden_size, device, kernel_size=1):
+    def __init__(self, input_size, hidden_size, kernel_size=1, device=None):
         super(ConvLSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.kernel_size = kernel_size
-        self.padding = (self.kernel_size - 1) / 2
+        self.padding = (self.kernel_size - 1) // 2
         self.Gates = nn.Conv2d(input_size + hidden_size, 4 * hidden_size, self.kernel_size, padding=self.padding)
         self.device = device
         # self.lstm = nn.LSTM
@@ -67,16 +67,17 @@ class ConvLSTMCell(nn.Module):
 class ConvLSTM(nn.Module):
     # input_channels corresponds to the first input feature map
     # hidden state is a list of succeeding lstm layers.
-    def __init__(self, input_channels, hidden_channels, hidden_layer_num, kernel_size=1, bias=True):
+    def __init__(self, input_channels, hidden_channels, hidden_layer_num, kernel_size=1, bias=True, device=None):
         super(ConvLSTM, self).__init__()
         assert hidden_channels >= 1, "Hidden layer number less than 1."
 
+        self.device = device
         self.hidden_layer_num = hidden_layer_num
         self.learn_modeles = torch.nn.ModuleList()
         self.prev_states = [None for _ in range(self.hidden_layer_num)]
-        self.learn_modeles.append(ConvLSTMCell(input_channels, hidden_channels, kernel_size))
+        self.learn_modeles.append(ConvLSTMCell(input_channels, hidden_channels, kernel_size, self.device))
         for _ in range(hidden_layer_num-1):
-            self.learn_modeles.append(ConvLSTMCell(hidden_channels, hidden_channels, kernel_size))
+            self.learn_modeles.append(ConvLSTMCell(hidden_channels, hidden_channels, kernel_size, self.device))
 
     def forward(self, x):
         for prev_state in self.prev_states:
