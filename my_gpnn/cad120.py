@@ -8,7 +8,7 @@ Description of the file.
 """
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES']="8"
+os.environ['CUDA_VISIBLE_DEVICES']="0"
 import argparse
 import time
 import datetime
@@ -55,7 +55,7 @@ def main(args):
     start_time = time.time()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
-    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H-%M-%S')
     logger = logutil.Logger(os.path.join(args.log_root, timestamp))
 
     # Load data
@@ -74,8 +74,7 @@ def main(args):
         criterion = criterion.cuda()
 
     loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
-    print(loaded_checkpoint)
-    time.sleep(1000)
+  
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
@@ -223,12 +222,12 @@ def validate(val_loader, model, criterion, logger=None, args=None, test=False):
         confusion_matrix = sklearn.metrics.confusion_matrix(subact_ground_truth, subact_predictions,
                                                             labels=range(len(datasets.cad_metadata.subactivities)))
         utils.plot_confusion_matrix(confusion_matrix, datasets.cad_metadata.subactivities, normalize=True, title='',
-                              filename=os.path.join(result_folder, 'confusion_subactivity.pdf'))
+                              filename=os.path.join(result_folder, 'confusion_subactivity_new.pdf'))
 
         confusion_matrix = sklearn.metrics.confusion_matrix(affordance_ground_truth, affordance_predictions,
                                                             labels=range(len(datasets.cad_metadata.affordances)))
         utils.plot_confusion_matrix(confusion_matrix, datasets.cad_metadata.affordances, normalize=True, title='',
-                              filename=os.path.join(result_folder, 'confusion_affordance.pdf'))
+                              filename=os.path.join(result_folder, 'confusion_affordance_new.pdf'))
 
     subact_micro_result = sklearn.metrics.precision_recall_fscore_support(subact_ground_truth, subact_predictions, labels=range(10), average='micro')
     subact_macro_result = sklearn.metrics.precision_recall_fscore_support(subact_ground_truth, subact_predictions, labels=range(10), average='macro')
@@ -280,11 +279,11 @@ def parse_arguments():
                         help='Input batch size for training (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='Enables CUDA training')
-    parser.add_argument('--epochs', type=int, default=0, metavar='N',
+    parser.add_argument('--epochs', type=int, default=2, metavar='N',
                         help='Number of epochs to train (default: 10)')
     parser.add_argument('--start-epoch', type=int, default=0, metavar='N',
                         help='Index of epoch to start (default: 0)')
-    parser.add_argument('--lr', type=lambda x: restricted_float(x, [1e-5, 1e-2]), default=5e-5, metavar='LR',
+    parser.add_argument('--lr', type=lambda x: restricted_float(x, [1e-5, 1e-2]), default=1e-4, metavar='LR',
                         help='Initial learning rate [1e-5, 1e-2] (default: 1e-3)')
     parser.add_argument('--lr-decay', type=lambda x: restricted_float(x, [.01, 1]), default=0.8, metavar='LR-DECAY',
                         help='Learning rate decay factor [.01, 1] (default: 0.8)')

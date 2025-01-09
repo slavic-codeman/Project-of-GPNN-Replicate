@@ -32,12 +32,12 @@ class GPNN_VCOCO(torch.nn.Module):
             model_args['edge_feature_size'] = model_args['message_size']
             model_args['node_feature_size'] = model_args['message_size']
 
-        self.link_fun = units.LinkFunction('GraphConv', model_args).to(self.device)
+        self.link_fun = units.LinkFunction('GraphConv', model_args, self.device).to(self.device)
         self.sigmoid = torch.nn.Sigmoid().to(self.device)
-        self.message_fun = units.MessageFunction('linear_concat_relu', model_args).to(self.device)
-        self.update_fun = units.UpdateFunction('gru', model_args).to(self.device)
-        self.readout_fun = units.ReadoutFunction('fc', {'readout_input_size': model_args['node_feature_size'], 'output_classes': model_args['hoi_classes']}).to(self.device)
-        self.readout_fun2 = units.ReadoutFunction('fc', {'readout_input_size': model_args['node_feature_size'], 'output_classes': model_args['roles_num']}).to(self.device)
+        self.message_fun = units.MessageFunction('linear_concat_relu', model_args, self.device).to(self.device)
+        self.update_fun = units.UpdateFunction('gru', model_args, self.device).to(self.device)
+        self.readout_fun = units.ReadoutFunction('fc', {'readout_input_size': model_args['node_feature_size'], 'output_classes': model_args['hoi_classes']}, self.device).to(self.device)
+        self.readout_fun2 = units.ReadoutFunction('fc', {'readout_input_size': model_args['node_feature_size'], 'output_classes': model_args['roles_num']}, self.device).to(self.device)
 
         self.propagate_layers = model_args['propagate_layers']
 
@@ -65,7 +65,7 @@ class GPNN_VCOCO(torch.nn.Module):
                 h_v = hidden_node_states[passing_round][:, :, i_node]
                 h_w = hidden_node_states[passing_round]
                 e_vw = edge_features[:, :, i_node, :]
-                m_v = self.message_fun(h_v, h_w, e_vw, args)
+                m_v = self.message_fun(h_v, h_w, e_vw)
 
                 # Sum up messages from different nodes according to weights
                 m_v = sigmoid_pred_adj_mat[:, i_node, :].unsqueeze(1).expand_as(m_v) * m_v
