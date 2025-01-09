@@ -35,7 +35,7 @@ class MessageFunction(torch.nn.Module):
     def init_linear(self):
         edge_feature_size = self.args['edge_feature_size']
         node_feature_size = self.args['node_feature_size']
-        message_size = self.args['message_size']/2 if self.concat else self.args['message_size']
+        message_size = self.args['message_size']//2 if self.concat else self.args['message_size']
 
         self.edge_func = torch.nn.Linear(edge_feature_size, message_size, bias=True)
         self.node_func = torch.nn.Linear(node_feature_size, message_size, bias=True)

@@ -5,9 +5,11 @@ import os, json
 coco = []
 
 def get_data_dir():
-    this_dir = os.path.dirname(__file__)
-    dir_name = os.path.join(this_dir, 'data') 
-    dir_name="/home/tangjq/WORK/GPNN/gpnn-master/v-coco-master/data"
+    # this_dir = os.path.dirname(__file__)
+    # dir_name = os.path.join(this_dir, 'data') 
+    # dir_name="/home/tangjq/WORK/GPNN/gpnn-master/v-coco-master/data"
+    root_dir = os.path.dirname(os.path.dirname(__file__))
+    dir_name = os.path.join(root_dir, 'v-coco-master', 'data')
     return dir_name
 
 def load_coco(dir_name=None):

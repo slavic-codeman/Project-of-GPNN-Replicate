@@ -13,19 +13,19 @@ class GPNN_CAD(torch.nn.Module):
 
         self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.link_fun = units.LinkFunction('GraphConvLSTM', model_args).to(self.device)
-        self.message_fun = units.MessageFunction('linear_concat', model_args).to(self.device)
+        self.link_fun = units.LinkFunction('GraphConvLSTM', model_args, self.device).to(self.device)
+        self.message_fun = units.MessageFunction('linear_concat', model_args, self.device).to(self.device)
 
         self.update_funs = torch.nn.ModuleList([
-        units.UpdateFunction('gru', model_args).to(self.device),
-        units.UpdateFunction('gru', model_args).to(self.device)
+        units.UpdateFunction('gru', model_args, self.device).to(self.device),
+        units.UpdateFunction('gru', model_args, self.device).to(self.device)
         ])
 
         self.subactivity_classes = model_args['subactivity_classes']
         self.affordance_classes = model_args['affordance_classes']
         self.readout_funs = torch.nn.ModuleList([
-        units.ReadoutFunction('fc_soft_max', {'readout_input_size': model_args['node_feature_size'], 'output_classes': self.subactivity_classes}).to(self.device),
-        units.ReadoutFunction('fc_soft_max', {'readout_input_size': model_args['node_feature_size'], 'output_classes': self.affordance_classes}).to(self.device)
+        units.ReadoutFunction('fc_soft_max', {'readout_input_size': model_args['node_feature_size'], 'output_classes': self.subactivity_classes}, self.device).to(self.device),
+        units.ReadoutFunction('fc_soft_max', {'readout_input_size': model_args['node_feature_size'], 'output_classes': self.affordance_classes}, self.device).to(self.device)
         ])
 
         self.propagate_layers = model_args['propagate_layers']
@@ -47,7 +47,7 @@ class GPNN_CAD(torch.nn.Module):
                 h_v = hidden_node_states[passing_round][:, :, i_node]
                 h_w = hidden_node_states[passing_round]
                 e_vw = edge_features[:, :, i_node, :]
-                m_v = self.message_fun(h_v, h_w, e_vw, args)
+                m_v = self.message_fun(h_v, h_w, e_vw)
 
                 # Sum up messages from different nodes according to weights
                 m_v = pred_adj_mat[:, i_node, :].unsqueeze(1).expand_as(m_v) * m_v

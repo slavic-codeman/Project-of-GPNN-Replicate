@@ -20,13 +20,20 @@ class Paths(object):
             data_root: The root folder of all the recorded data of events
             metadata_root: The root folder where the processed information (Skeleton and object features) is stored.
         """
-        self.project_root = '/home/tangjq/WORK/GPNN/gpnn-master/'
-        self.tmp_root = '/data1/tangjq/tmp'
+        # self.project_root = '/home/tangjq/WORK/GPNN/gpnn-master/'
+        # self.tmp_root = '/data1/tangjq/tmp'
+        # self.log_root = os.path.join(self.project_root, 'log')
+
+        # self.cad_data_root = ''
+        # self.hico_data_root = os.path.join(self.project_root, 'tmp', 'hico')
+        # self.vcoco_data_root = '/home/tangjq/WORK/GPNN/gpnn-master/'
+        self.project_root = os.path.dirname(os.path.dirname(__file__))
+        self.tmp_root = os.path.join(self.project_root, 'tmp')
         self.log_root = os.path.join(self.project_root, 'log')
 
         self.cad_data_root = ''
         self.hico_data_root = os.path.join(self.project_root, 'tmp', 'hico')
-        self.vcoco_data_root = '/home/tangjq/WORK/GPNN/gpnn-master/'
+        self.vcoco_data_root = os.path.dirname(os.path.dirname(__file__))
 
 
 def set_logger(name='learner.log'):

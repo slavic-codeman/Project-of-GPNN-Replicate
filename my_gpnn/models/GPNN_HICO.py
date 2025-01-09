@@ -24,13 +24,14 @@ class GPNN_HICO(torch.nn.Module):
             model_args['edge_feature_size'] = model_args['message_size']
             model_args['node_feature_size'] = model_args['message_size']
 
-        self.link_fun = units.LinkFunction('GraphConv', model_args).to(self.device)
+        self.link_fun = units.LinkFunction('GraphConv', model_args, self.device).to(self.device)
         self.sigmoid = torch.nn.Sigmoid().to(self.device)
-        self.message_fun = units.MessageFunction('linear_concat_relu', model_args).to(self.device)
-        self.update_fun = units.UpdateFunction('gru', model_args).to(self.device)
+        self.message_fun = units.MessageFunction('linear_concat_relu', model_args, self.device).to(self.device)
+        self.update_fun = units.UpdateFunction('gru', model_args, self.device).to(self.device)
         self.readout_fun = units.ReadoutFunction('fc', 
                                                  {'readout_input_size': model_args['node_feature_size'],
-                                                   'output_classes': model_args['hoi_classes']}).to(self.device)
+                                                   'output_classes': model_args['hoi_classes']},
+                                                   self.device).to(self.device)
 
         self.propagate_layers = model_args['propagate_layers']
 
@@ -45,11 +46,8 @@ class GPNN_HICO(torch.nn.Module):
         hidden_node_states = [[node_features[batch_i, ...].unsqueeze(0).clone() for _ in range(self.propagate_layers+1)] for batch_i in range(node_features.size()[0])]
         hidden_edge_states = [[edge_features[batch_i, ...].unsqueeze(0).clone() for _ in range(self.propagate_layers+1)] for batch_i in range(node_features.size()[0])]
 
-        pred_adj_mat = torch.autograd.Variable(torch.zeros(adj_mat.size()))
-        pred_node_labels = torch.autograd.Variable(torch.zeros(node_labels.size()))
-        if args.cuda:
-            pred_node_labels = pred_node_labels.cuda()
-            pred_adj_mat = pred_adj_mat.cuda()
+        pred_adj_mat = torch.zeros(adj_mat.size()).to(device=self.device)
+        pred_node_labels = torch.zeros(node_labels.size()).to(device=self.device)
 
         for batch_idx in range(node_features.size()[0]):
             valid_node_num = human_nums[batch_idx] + obj_nums[batch_idx]
@@ -63,7 +61,7 @@ class GPNN_HICO(torch.nn.Module):
                     h_v = hidden_node_states[batch_idx][passing_round][:, :, i_node]
                     h_w = hidden_node_states[batch_idx][passing_round][:, :, :valid_node_num]
                     e_vw = edge_features[batch_idx, :, i_node, :valid_node_num].unsqueeze(0)
-                    m_v = self.message_fun(h_v, h_w, e_vw, args)
+                    m_v = self.message_fun(h_v, h_w, e_vw)
 
                     # Sum up messages from different nodes according to weights
                     m_v = sigmoid_pred_adj_mat[:, i_node, :valid_node_num].unsqueeze(1).expand_as(m_v) * m_v

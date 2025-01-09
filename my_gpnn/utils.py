@@ -206,8 +206,10 @@ def get_hico_data(args):
 
 
 def get_vcoco_data(args):
-    root = os.path.join(args.data_root, 'processed', args.feature_type)
-    root="/data1/tangjq/tmp/vcoco/vcoco_features/"
+    # root = os.path.join(args.data_root, 'processed', args.feature_type)
+    # root="/data1/tangjq/tmp/vcoco/vcoco_features/"
+    root_dir = os.path.dirname(os.path.dirname(__file__))
+    root = os.path.join(root_dir, 'tmp', 'vcoco', 'vcoco_features')
     training_set = datasets.VCOCO(root, 'train')
     valid_set = datasets.VCOCO(root, 'val')
     testing_set = datasets.VCOCO(root, 'test')

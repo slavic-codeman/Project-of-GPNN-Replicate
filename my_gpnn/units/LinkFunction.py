@@ -9,7 +9,7 @@ Description of the file.
 
 import torch
 import torch.nn
-import ConvLSTM
+from . import ConvLSTM
 
 
 class LinkFunction(torch.nn.Module):

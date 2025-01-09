@@ -8,7 +8,7 @@ Description of the file.
 """
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES']="8"
+os.environ['CUDA_VISIBLE_DEVICES']="0"
 import argparse
 import time
 import datetime
@@ -27,6 +27,10 @@ import models
 import config
 import logutil
 import utils
+from visualization_utils import visualize_hoi
+import cv2
+from PIL import Image, ImageDraw, ImageFont
+from datasets.VCOCO import metadata
 
 action_class_num = len(datasets.vcoco_metadata.action_classes)
 roles_num = len(datasets.vcoco_metadata.roles)
@@ -110,6 +114,7 @@ def append_results(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_no
 
 
 def vcoco_evaluation(args, vcocoeval, imageset, all_results):
+
     det_file = os.path.join(args.eval_root, '{}_detections.pkl'.format(imageset))
     pickle.dump(all_results, open(det_file, 'wb'))
     vcocoeval._do_eval(det_file, ovr_thresh=0.5)
@@ -192,7 +197,7 @@ def main(args):
     start_time = time.time()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
-    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H-%M-%S')
     logger = logutil.Logger(os.path.join(args.log_root, timestamp))
 
     # Load data
@@ -224,11 +229,15 @@ def main(args):
         multi_label_loss = multi_label_loss.cuda()
 
     loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
-   
-
+    
+    
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
+   
+    # for param_group in optimizer.param_groups:
+    #     print(1e-3/param_group['lr'])
 
+    # time.sleep(1000)
     epoch_errors = list()
     avg_epoch_error = np.inf
     best_epoch_error = np.inf
@@ -249,7 +258,7 @@ def main(args):
             avg_epoch_error = new_avg_epoch_error
             epoch_errors = list()
 
-        if epoch % 2 == 1:
+        if (epoch+1) % 5 == 0:
             print('Learning rate decrease')
             args.lr *= args.lr_decay
             for param_group in optimizer.param_groups:
@@ -269,7 +278,7 @@ def main(args):
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
     """如果validate的test=True，则会报错keyError，可能是还是有数据缺失，待解决"""
-    validate(args, test_loader, model, mse_loss, multi_label_loss, test_vcocoeval, test=True)
+    validate(args, test_loader, model, mse_loss, multi_label_loss, val_vcocoeval, test=True)
     print('Time elapsed: {:.2f}s'.format(time.time() - start_time))
 
 
@@ -338,7 +347,8 @@ def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoc
 
 def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, logger=None, test=False):
     if args.visualize:
-        result_folder = os.path.join(args.tmp_root, 'results/VCOCO/detections/', 'top'+str(args.vis_top_k))
+        # result_folder = os.path.join(args.tmp_root, 'results/VCOCO/detections/', 'top'+str(args.vis_top_k))
+        result_folder = os.path.join(args.tmp_root, 'results/VCOCO/detections/visualization')
         if not os.path.exists(result_folder):
             os.makedirs(result_folder)
 
@@ -363,8 +373,27 @@ def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, log
 
         pred_adj_mat, pred_node_labels, pred_node_roles = model(edge_features, node_features, adj_mat, node_labels, node_roles, human_nums, obj_nums, args)
         det_indices, loss = loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss)
+        # print(det_indices) # [检测到的所有hoi数*(batch_id, human_index, obj_index, confidence)]
+        if len(det_indices) == 0:
+            continue
+        best_det_indices = [max(det_indices, key=lambda x: x[3])[:3]]
         append_results(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, img_ids,
                            boxes, human_nums, obj_nums, classes, all_results)
+        pred_actions_indeces = torch.argmax(pred_node_labels, axis=2)
+        pred_actions = [metadata.action_classes[i] for i in pred_actions_indeces[0]]
+        pred_action = None
+        for action in pred_actions:
+            if action != 'no_interaction':
+                pred_action = action
+                break
+        # print(classes)
+        # print(boxes[0].shape)
+        # print(adj_mat.shape)
+        # print(node_labels.shape)
+        # # print(node_roles.shape)
+        # print(best_det_indices)
+        # import sys
+        # sys.exit()
 
         # Log
         if len(det_indices) > 0:
@@ -384,12 +413,56 @@ def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, log
                   'Detected HOIs {y_shape}'
                   .format(i, len(val_loader), batch_time=batch_time,
                           loss=losses, mean_avg_prec=mean_avg_prec, y_shape=y_true.shape))
+            
+        if args.visualize:
+            # utils.visualize_vcoco_result(args, result_folder, all_results)
+            for j, image_id in enumerate(img_ids):
+                image_path = os.path.join('/data1/tangjq/COCO_data/val2014', f"COCO_val2014_{image_id:012d}.jpg")
+                save_path = os.path.join(result_folder, f"COCO_val2014_{image_id:012d}.jpg")
+                # image = cv2.imread(image_path)
+                image = Image.open(image_path)
+                image = np.array(image)
+                # image_pil = Image.fromarray(np.uint8(image)).convert('RGB')
+                # image_pil.save('/home/tangjq/WORK/GPNN/gpnn-master/tmp/results/HICO/detections/debug/0.jpg')
+                # import sys
+                # sys.exit()
+                for n, (batch, human_indice, obj_indice) in enumerate(best_det_indices):
+                    new_classes = [classes[batch][human_indice], classes[batch][obj_indice]]
+                    new_boxes = np.array([boxes[batch][human_indice], boxes[batch][obj_indice]])
+                    image = visualize_hoi(image=image, boxes=new_boxes, classes=new_classes, scores=None, line_thickness=1)
+                    if pred_action != None:
+                        draw = ImageDraw.Draw(image)
+                        font = ImageFont.truetype('/usr/share/fonts/truetype/freefont/FreeSans.ttf', 24)
+                        # text_width, text_height = draw.textsize(pred_action, font=font)
+                        # image_width, image_height = image.size
+                        # text_x = (image_width - text_width) // 2
+                        # text_y = -text_height - 10
+                        # draw.text((text_x, text_y), pred_action, fill="black", font=font)
+                        # 5. 计算文字大小
+                        text_width, text_height = draw.textsize(pred_action, font=font)
+
+                        # 6. 计算矩形框和文字的位置
+                        image_width, image_height = image.size
+                        text_x = (image_width - text_width) // 2  # 文字水平居中
+                        text_y = 10  # 文字距图像顶部10像素
+                        padding = 5  # 矩形框与文字之间的边距
+
+                        # 矩形框的坐标
+                        rect_x1 = text_x - padding
+                        rect_y1 = text_y - padding
+                        rect_x2 = text_x + text_width + padding
+                        rect_y2 = text_y + text_height + padding
+
+                        # 7. 绘制白色矩形框
+                        draw.rectangle([(rect_x1, rect_y1), (rect_x2, rect_y2)], fill="white")
+
+                        # 8. 绘制黑色文字
+                        draw.text((text_x, text_y), pred_action, fill="black", font=font)
+                    image.save(save_path)
        
     mean_avg_prec = compute_mean_avg_prec(y_true, y_score)
     if test:
         vcoco_evaluation(args, vcocoeval, 'test', all_results)
-        if args.visualize:
-            utils.visualize_vcoco_result(args, result_folder, all_results)
     else:
         pass
         # vcoco_evaluation(args, vcocoeval, 'val', all_results)
@@ -425,7 +498,7 @@ def parse_arguments():
     parser.add_argument('--resume', default=os.path.join(paths.tmp_root, 'checkpoints/vcoco/parsing'), help='path to latest checkpoint')
     parser.add_argument('--eval-root', default=os.path.join(paths.tmp_root, 'evaluation/vcoco/'), help='path to save evaluation file')
     parser.add_argument('--feature-type', default=feature_type, help='feature_type')
-    parser.add_argument('--visualize', action='store_true', default=False, help='Visualize final results')
+    parser.add_argument('--visualize', action='store_true', default=True, help='Visualize final results')
     parser.add_argument('--vis-top-k', type=int, default=1, metavar='N', help='Top k results to visualize')
 
     # Optimization Options
@@ -433,13 +506,13 @@ def parse_arguments():
                         help='Input batch size for training (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='Enables CUDA training')
-    parser.add_argument('--epochs', type=int, default=0, metavar='N',
+    parser.add_argument('--epochs', type=int, default=20, metavar='N',
                         help='Number of epochs to train (default: 10)')
     parser.add_argument('--start-epoch', type=int, default=0, metavar='N',
                         help='Index of epoch to start (default: 0)')
     parser.add_argument('--link-weight', type=float, default=2, metavar='N',
                         help='Loss weight of existing edges')
-    parser.add_argument('--lr', type=lambda x: restricted_float(x, [1e-5, 1e-2]), default=1e-4, metavar='LR',
+    parser.add_argument('--lr', type=lambda x: restricted_float(x, [1e-5, 1e-2]), default=1e-3, metavar='LR',
                         help='Initial learning rate [1e-5, 1e-2] (default: 1e-3)')
     parser.add_argument('--lr-decay', type=lambda x: restricted_float(x, [.01, 1]), default=0.8, metavar='LR-DECAY',
                         help='Learning rate decay factor [.01, 1] (default: 0.8)')
