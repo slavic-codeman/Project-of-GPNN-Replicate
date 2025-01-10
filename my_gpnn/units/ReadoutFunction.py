@@ -13,7 +13,7 @@ import torch
 class ReadoutFunction(torch.nn.Module):
     def __init__(self, readout_def, args, device):
         super(ReadoutFunction, self).__init__()
-        self.readout_def = readout_def
+        self.readout_def = readout_def.lower()
         self.args = args
         self.device = device
 
@@ -33,13 +33,18 @@ class ReadoutFunction(torch.nn.Module):
         input_size = self.args['readout_input_size']
         output_classes = self.args['output_classes']
         # 此处和源码结构不同
-        self.learn_modules.append(torch.nn.Linear(input_size, input_size))
-        self.learn_modules.append(torch.nn.ReLU())
-        self.learn_modules.append(torch.nn.Linear(input_size, output_classes))
-        if self.sigmoid:
+        # self.learn_modules.append(torch.nn.Linear(input_size, input_size))
+        # self.learn_modules.append(torch.nn.ReLU())
+        if self.readout_def == 'fc_soft_max':
+            self.learn_modules.append(torch.nn.Linear(input_size, output_classes))
+            self.learn_modules.append(torch.nn.Softmax(dim=1))
+        elif self.readout_def == 'fc':
+            self.learn_modules.append(torch.nn.Linear(input_size, input_size))
+            self.learn_modules.append(torch.nn.ReLU())
+            self.learn_modules.append(torch.nn.Linear(input_size, output_classes))
+        elif self.readout_def == 'fc_sig':
+            self.learn_modules.append(torch.nn.Linear(input_size, output_classes))
             self.learn_modules.append(torch.nn.Sigmoid())
-        if self.softmax:
-            self.learn_modules.append(torch.nn.Softmax())
     
     def forward(self, h_v):
         last_layer_output = h_v

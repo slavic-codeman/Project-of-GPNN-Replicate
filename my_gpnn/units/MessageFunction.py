@@ -15,13 +15,14 @@ import torch.autograd
 class MessageFunction(torch.nn.Module):
     def __init__(self, message_def, args, device):
         super(MessageFunction, self).__init__()
-        self.message_def = message_def
+        self.message_def = message_def.lower()
         self.args = args
         self.device = device
 
         self.edge = 'edge' in self.message_def
         self.concat = 'concat' in self.message_def
         self.relu = 'relu' in self.message_def
+        self.learn_modules = torch.nn.ModuleList([])
         self.init_linear()
 
     # Get the name of the used message function
@@ -37,8 +38,8 @@ class MessageFunction(torch.nn.Module):
         node_feature_size = self.args['node_feature_size']
         message_size = self.args['message_size']//2 if self.concat else self.args['message_size']
 
-        self.edge_func = torch.nn.Linear(edge_feature_size, message_size, bias=True)
-        self.node_func = torch.nn.Linear(node_feature_size, message_size, bias=True)
+        self.learn_modules.append(torch.nn.Linear(edge_feature_size, message_size, bias=True))
+        self.learn_modules.append(torch.nn.Linear(node_feature_size, message_size, bias=True))
         self.relu = torch.nn.ReLU()
 
     # Message from h_v to h_w through e_vw
@@ -46,8 +47,8 @@ class MessageFunction(torch.nn.Module):
         message = torch.zeros(e_vw.shape[0], self.args['message_size'], e_vw.shape[2]).to(self.device)
 
         for i_node in range(e_vw.shape[2]):
-            edge_output = self.edge_func(e_vw[:, :, i_node])
-            node_output = self.node_func(h_w[:, :, i_node])
+            edge_output = self.learn_modules[0](e_vw[:, :, i_node])
+            node_output = self.learn_modules[1](h_w[:, :, i_node])
             if self.concat:
                 message[:, :, i_node] = torch.cat([edge_output, node_output], 1)
             else:

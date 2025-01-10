@@ -17,8 +17,8 @@ class GPNN_CAD(torch.nn.Module):
         self.message_fun = units.MessageFunction('linear_concat', model_args, self.device).to(self.device)
 
         self.update_funs = torch.nn.ModuleList([
-        units.UpdateFunction('gru', model_args, self.device).to(self.device),
-        units.UpdateFunction('gru', model_args, self.device).to(self.device)
+        units.UpdateFunction('transformer' if model_args.get('transformer', False) else 'gru', model_args, self.device).to(self.device),
+        units.UpdateFunction('transformer' if model_args.get('transformer', False) else 'gru', model_args, self.device).to(self.device)
         ])
 
         self.subactivity_classes = model_args['subactivity_classes']

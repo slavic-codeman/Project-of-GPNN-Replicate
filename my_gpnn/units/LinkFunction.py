@@ -15,11 +15,11 @@ from . import ConvLSTM
 class LinkFunction(torch.nn.Module):
     def __init__(self, link_def, args, device):
         super(LinkFunction, self).__init__()
-        self.link_def = link_def
+        self.link_def = link_def.lower()
         self.args = args
         self.device = device
         self.learn_modules = torch.nn.ModuleList()
-        self.lstm = 'lstm' in link_def
+        self.lstm = 'lstm' in self.link_def
         self.init_graph_conv()
 
     def get_definition(self):
@@ -41,7 +41,7 @@ class LinkFunction(torch.nn.Module):
         hidden_layers = self.args['link_hidden_layers']
 
         if self.lstm:
-            self.ConvLSTM = ConvLSTM.ConvLSTM(input_size, hidden_size, hidden_layers)
+            self.ConvLSTM = ConvLSTM.ConvLSTM(input_size, hidden_size, hidden_layers, device=self.device)
             self.learn_modules.append(torch.nn.Conv2d(hidden_size, 1, 1))
             self.learn_modules.append(torch.nn.Sigmoid())
 
