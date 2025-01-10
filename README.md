@@ -81,13 +81,22 @@ python my_gpnn/vcoco.py
 
 
 ### CAD-120
+### CAD-120
 
-For training and evaluation, run
+It has two files as 
 ```
-python my_gpnn/cad120.py --task="prediction" #For HOI anticipation
-python my_gpnn/cad120.py --task="parsing" #For HOI detection
+my_gpnn/cad120.py #For HOI detection
+my_gpnn/cad120_prediction.py #For HOI anticipation
 ```
-Visualizations will be saved to 
+and their structures are similar. After specifying arguments, you can directly run
+```
+python my_gpnn/cad120.py
+```
+and 
+```
+python my_gpnn/cad120_prediction.py
+```
+for training and evaluation. Visualizations will be saved to 
 ```
 ./tmp/results/CAD
 ```
