@@ -2,16 +2,26 @@
 To run our project, please read this file carefully for detailed instructions.
 
 ## Environments
-We recommend using Anaconda to create a Python 3.10 environment.
+We recommend using Anaconda to create a Python 3.10 environment. Linux is recommended.
 ```
 conda create -n gpnn python=3.10
 conda activate gpnn
 ```
 
-Then to install dependencies, use
+Then to install dependencies, first insatll 
 ```
 pip install -r requirements.txt
 ```
+and then install 
+```
+pip install pycocotools
+```
+
+As for Pytorch, you should make sure that it matches your CUDA version. For example, if you are using CUDA 12.1, you should install with
+```
+pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cu121
+```
+You can refer to [here](https://pytorch.org/get-started/previous-versions/) for help.
 ## Paths
 When running codes, please make sure that your terminal is one level above the folder ```my_gpnn```, to ensure that results can be generated in correct paths. This is to say, please ensure that folders ```my_gpnn```, ```tmp```, and ```v-coco-master``` are all in one directory, where you open your terminal for running codes.
 
@@ -33,9 +43,9 @@ These files have similar structures. First, they all have a ```parse_arguments()
 model_args = 
 {
     ......
-'update_type':'gru'}
+ 'update_type': 'transformer' if args.transformer else 'gru'}
 ```
-The ```update_type``` here decides the type of update function, and you can change it by adding arguments ```--transformer``` when running the code to use transformer rather than gpu. Saving and loading trained model file with transformer architecture is correspondingly set automately in 
+The ```update_type``` here decides the type of update function, and you can change it by changing arguments ```--transformer``` when running the code to use transformer rather than gpu. Saving and loading trained model file with transformer architecture is correspondingly set automately in 
 ```
 ./my_gpnn/datasets/utils.py
 ```
